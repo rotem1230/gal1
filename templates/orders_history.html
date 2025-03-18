@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}היסטוריית הזמנות{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">היסטוריית הזמנות</h2>
+    
+    {% if orders %}
+        <div class="row">
+            {% for order in orders %}
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0">הזמנה #{{ order.id }}</h5>
+                            <small class="text-muted">{{ order.date.strftime('%d/%m/%Y %H:%M') }}</small>
+                            {% if order.customer %}
+                            <div class="mt-1">
+                                <strong>לקוח:</strong> {{ order.customer.name }}
+                                {% if order.customer.phone %}
+                                <br><strong>טלפון:</strong> {{ order.customer.phone }}
+                                {% endif %}
+                                {% if order.customer.address %}
+                                <br><strong>כתובת:</strong> {{ order.customer.address }}
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="text-left">
+                            <button class="btn btn-primary btn-sm" onclick="window.location.href='{{ url_for('export_pdf', order_id=order.id, type='warehouse') }}'">
+                                <i class="bi bi-file-pdf"></i> הורד PDF
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>שם המוצר</th>
+                                        <th>כמות</th>
+                                        <th>מחיר ליחידה</th>
+                                        <th>סה"כ</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in order.items %}
+                                    <tr>
+                                        <td>{{ item.product_name }}</td>
+                                        <td>{{ item.quantity }}</td>
+                                        <td>₪{{ "%.2f"|format(item.price_with_vat) }}</td>
+                                        <td>₪{{ "%.2f"|format(item.price_with_vat * item.quantity) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="3" class="text-left"><strong>סה"כ ללא מע"מ:</strong></td>
+                                        <td>₪{{ "%.2f"|format(order.total_without_vat) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="3" class="text-left"><strong>סה"כ כולל מע"מ:</strong></td>
+                                        <td>₪{{ "%.2f"|format(order.total_with_vat) }}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> אין הזמנות קודמות
+        </div>
+    {% endif %}
+</div>
+
+{% block styles %}
+<style>
+.card {
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.table th {
+    background-color: #f8f9fa;
+}
+</style>
+{% endblock %}
+{% endblock %} 

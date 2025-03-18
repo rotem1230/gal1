@@ -1,0 +1,657 @@
+{% extends "base.html" %}
+
+{% block title %}ניהול מוצרים{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>ניהול מוצרים</h2>
+    <div>
+        <button class="btn btn-danger me-2" onclick="deleteAllProducts()">
+            <i class="bi bi-trash"></i> מחק את כל המוצרים
+        </button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addProductModal">
+            <i class="bi bi-plus-lg"></i> הוסף מוצר חדש
+        </button>
+    </div>
+</div>
+
+<!-- טופס חיפוש וסינון -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">חיפוש</label>
+                <div class="input-group">
+                    <input type="text" 
+                           class="form-control" 
+                           name="search" 
+                           id="searchInput"
+                           value="{{ search_query }}" 
+                           placeholder="חפש מוצר..."
+                           autocomplete="off">
+                    {% if search_query %}
+                    <a href="{{ url_for('products') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                    {% endif %}
+                </div>
+                <!-- תיבת התצוגה המקדימה -->
+                <div id="searchPreview" class="search-preview"></div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">קטגוריה</label>
+                <select class="form-select" name="category" onchange="this.form.submit()">
+                    <option value="">כל הקטגוריות</option>
+                    {% for category in categories %}
+                    <option value="{{ category.id }}" {% if category_filter|string == category.id|string %}selected{% endif %}>
+                        {{ category.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">מיון לפי</label>
+                <select class="form-select" name="sort" onchange="this.form.submit()">
+                    <option value="name" {% if sort_by == 'name' %}selected{% endif %}>שם</option>
+                    <option value="price_asc" {% if sort_by == 'price_asc' %}selected{% endif %}>מחיר - מהנמוך לגבוה</option>
+                    <option value="price_desc" {% if sort_by == 'price_desc' %}selected{% endif %}>מחיר - מהגבוה לנמוך</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> חפש
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- תצוגת המוצרים -->
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    {% if products %}
+        {% for product in products %}
+        <div class="col">
+            <div class="card h-100">
+                {% if product.image %}
+                <div class="product-image-container">
+                    <img src="{{ url_for('static', filename='uploads/' + product.image) }}" 
+                         class="card-img-top product-image" 
+                         alt="{{ product.name }}">
+                </div>
+                {% endif %}
+                <div class="card-body">
+                    <h5 class="card-title">{{ product.name }}</h5>
+                    <p class="card-text">
+                        מחיר ללא מע"מ: ₪{{ "%.2f"|format(product.price_without_vat) }}<br>
+                        מחיר כולל מע"מ: ₪{{ "%.2f"|format(product.price_with_vat) }}<br>
+                        קטגוריה: {{ product.category.name }}
+                    </p>
+                    <div class="btn-group">
+                        <div class="input-group me-2" style="width: auto;">
+                            <span class="input-group-text">כמות</span>
+                            <input type="number" 
+                                   class="form-control quantity-input" 
+                                   id="quantity_{{ product.id }}" 
+                                   value="1" 
+                                   min="1" 
+                                   style="width: 70px;">
+                        </div>
+                        {% if product.variations %}
+                        <!-- אם יש וריאציות למוצר, נציג רשימה נפתחת -->
+                        <select class="form-select me-2" id="variation_{{ product.id }}" style="width: auto;">
+                            <option value="">בחר וריאציה...</option>
+                            {% for variation in product.variations %}
+                            <option value="{{ variation.id }}" 
+                                    data-price="{{ variation.price_with_vat }}"
+                                    data-price-without-vat="{{ variation.price_without_vat }}">
+                                {{ variation.name }} - ₪{{ "%.2f"|format(variation.price_with_vat) }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn-success" onclick="addToCartWithVariation({{ product.id }})">
+                            <i class="bi bi-cart-plus"></i> הוסף להזמנה
+                        </button>
+                        {% else %}
+                        <!-- אם אין וריאציות, נשתמש בכפתור הרגיל -->
+                        <button class="btn btn-success" onclick="addToCart({{ product.id }})">
+                            <i class="bi bi-cart-plus"></i> הוסף להזמנה
+                        </button>
+                        {% endif %}
+                        <button class="btn btn-primary" onclick="editProduct({{ product.id }})">
+                            <i class="bi bi-pencil"></i> ערוך
+                        </button>
+                        <button class="btn btn-danger" onclick="deleteProduct({{ product.id }})">
+                            <i class="bi bi-trash"></i> מחק
+                        </button>
+                        <button class="btn btn-info" onclick="manageVariations({{ product.id }})">
+                            <i class="bi bi-list"></i> וריאציות
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12">
+            <div class="alert alert-info text-center">
+                <i class="bi bi-info-circle"></i> לא נמצאו מוצרים
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Modal להוספת מוצר -->
+<div class="modal fade" id="addProductModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">הוספת מוצר חדש</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_product') }}" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">שם המוצר</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">מחיר ללא מע"מ</label>
+                        <input type="number" step="0.01" class="form-control" name="price_without_vat" id="price_without_vat" required 
+                               oninput="calculateVAT(this, 'add')">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">מחיר כולל מע"מ</label>
+                        <input type="number" step="0.01" class="form-control" name="price_with_vat" id="price_with_vat" required readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">קטגוריה</label>
+                        <select class="form-select" name="category_id" required>
+                            {% for category in categories %}
+                            <option value="{{ category.id }}">{{ category.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">תמונה</label>
+                        <input type="file" class="form-control" name="image" accept="image/png, image/jpeg, image/gif, image/webp">
+                        <small class="text-muted">ניתן להעלות תמונות מסוג: PNG, JPG, JPEG, GIF, WEBP</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                    <button type="submit" class="btn btn-primary">שמור מוצר</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- נוסיף מודל לעריכת מוצר -->
+<div class="modal fade" id="editProductModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">עריכת מוצר</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editProductForm" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">שם המוצר</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">מחיר ללא מע"מ</label>
+                        <input type="number" step="0.01" class="form-control" name="price_without_vat" id="edit_price_without_vat" required 
+                               oninput="calculateVAT(this, 'edit')">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">מחיר כולל מע"מ</label>
+                        <input type="number" step="0.01" class="form-control" name="price_with_vat" id="edit_price_with_vat" required readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">קטגוריה</label>
+                        <select class="form-select" name="category_id" required>
+                            {% for category in categories %}
+                            <option value="{{ category.id }}">{{ category.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">תמונה חדשה (אופציונלי)</label>
+                        <input type="file" class="form-control" name="image" accept="image/png, image/jpeg, image/gif, image/webp">
+                        <small class="text-muted">ניתן להעלות תמונות מסוג: PNG, JPG, JPEG, GIF, WEBP</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                    <button type="submit" class="btn btn-primary">שמור שינויים</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- מודל לניהול וריאציות -->
+<div class="modal fade" id="variationsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">ניהול וריאציות</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addVariationForm" class="mb-4">
+                    <h6>הוסף וריאציה חדשה</h6>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">שם הווריאציה</label>
+                                <input type="text" class="form-control" name="name" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">מחיר ללא מע"מ</label>
+                                <input type="number" step="0.01" class="form-control" name="price_without_vat" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">תמונה</label>
+                                <input type="file" class="form-control" name="image">
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">הוסף וריאציה</button>
+                </form>
+                
+                <div id="variationsList">
+                    <!-- כאן יוצגו הווריאציות הקיימות -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.product-image-container {
+    height: 200px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.product-image {
+    object-fit: cover;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.3s ease;
+}
+
+.card:hover .product-image {
+    transform: scale(1.1);
+}
+
+.card {
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.search-preview {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    z-index: 1000;
+    max-height: 300px;
+    overflow-y: auto;
+    display: none;
+}
+
+.preview-item {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.preview-item:hover {
+    background-color: #f8f9fa;
+}
+
+.preview-item img {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    margin-left: 10px;
+    border-radius: 4px;
+}
+
+.preview-item-details {
+    flex-grow: 1;
+}
+
+.preview-item-name {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.preview-item-price {
+    color: #666;
+    font-size: 0.9em;
+}
+
+.no-results {
+    padding: 10px;
+    text-align: center;
+    color: #666;
+}
+
+.quantity-input {
+    text-align: center;
+    -moz-appearance: textfield;
+}
+
+.quantity-input::-webkit-outer-spin-button,
+.quantity-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.input-group {
+    direction: ltr;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    let currentProductId = null;
+    const editModal = new bootstrap.Modal(document.getElementById('editProductModal'));
+    const variationsModal = new bootstrap.Modal(document.getElementById('variationsModal'));
+
+    function calculateVAT(input, mode) {
+        const priceWithoutVAT = parseFloat(input.value) || 0;
+        const VAT_RATE = 1.18;  // מע"מ 18%
+        const priceWithVAT = (priceWithoutVAT * VAT_RATE).toFixed(2);
+        
+        if (mode === 'add') {
+            document.getElementById('price_with_vat').value = priceWithVAT;
+        } else {
+            document.getElementById('edit_price_with_vat').value = priceWithVAT;
+        }
+    }
+
+    function editProduct(productId) {
+        currentProductId = productId;
+        fetch(`/get-product/${productId}`)
+            .then(response => response.json())
+            .then(data => {
+                const form = document.getElementById('editProductForm');
+                form.name.value = data.name;
+                form.price_without_vat.value = data.price_without_vat;
+                calculateVAT(form.price_without_vat, 'edit');
+                form.category_id.value = data.category_id;
+                editModal.show();
+            });
+    }
+
+    document.getElementById('editProductForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        
+        fetch(`/edit-product/${currentProductId}`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.message);
+            }
+        });
+    });
+
+    function deleteProduct(productId) {
+        if (confirm('האם אתה בטוח שברצונך למחוק מוצר זה?')) {
+            fetch(`/delete-product/${productId}`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message);
+                }
+            });
+        }
+    }
+
+    function addToCart(productId) {
+        const quantity = parseInt(document.getElementById(`quantity_${productId}`).value) || 1;
+        
+        if (quantity < 1) {
+            showToast('כמות חייבת להיות לפחות 1', 'danger');
+            return;
+        }
+
+        fetch('/add-to-cart/' + productId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ quantity: quantity })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`${quantity} יחידות נוספו להזמנה בהצלחה`);
+            } else {
+                showToast(data.message, 'danger');
+            }
+        });
+    }
+
+    // הוספת אירוע לבדיקת תקינות הכמות
+    document.querySelectorAll('.quantity-input').forEach(input => {
+        input.addEventListener('input', function() {
+            if (this.value < 1) {
+                this.value = 1;
+            }
+        });
+    });
+
+const searchInput = document.getElementById('searchInput');
+const searchPreview = document.getElementById('searchPreview');
+let debounceTimer;
+
+searchInput.addEventListener('input', function() {
+    clearTimeout(debounceTimer);
+    const query = this.value.trim();
+    
+    if (query.length < 2) {
+        searchPreview.style.display = 'none';
+        return;
+    }
+    
+    // המתנה קצרה לפני ביצוע החיפוש
+    debounceTimer = setTimeout(() => {
+        fetch(`/search-products?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(products => {
+                if (products.length > 0) {
+                    searchPreview.innerHTML = products.map(product => `
+                        <div class="preview-item" onclick="window.location.href='?search=${encodeURIComponent(product.name)}'">
+                            ${product.image ? 
+                                `<img src="/static/uploads/${product.image}" alt="${product.name}">` : 
+                                '<div class="no-image-placeholder"></div>'
+                            }
+                            <div class="preview-item-details">
+                                <div class="preview-item-name">${product.name}</div>
+                                <div class="preview-item-price">
+                                    מחיר: ₪${product.price_with_vat.toFixed(2)}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    searchPreview.innerHTML = '<div class="no-results">לא נמצאו תוצאות</div>';
+                }
+                searchPreview.style.display = 'block';
+            });
+    }, 300);
+});
+
+// סגירת התצוגה המקדימה בלחיצה מחוץ לאזור החיפוש
+document.addEventListener('click', function(e) {
+    if (!searchInput.contains(e.target) && !searchPreview.contains(e.target)) {
+        searchPreview.style.display = 'none';
+    }
+});
+
+function manageVariations(productId) {
+    currentProductId = productId;
+    loadVariations();
+    variationsModal.show();
+}
+
+function loadVariations() {
+    fetch(`/get-variations/${currentProductId}`)
+        .then(response => response.json())
+        .then(variations => {
+            const list = document.getElementById('variationsList');
+            list.innerHTML = variations.map(v => `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-2">
+                                ${v.image ? `<img src="/static/uploads/${v.image}" class="img-fluid">` : ''}
+                            </div>
+                            <div class="col-md-3">${v.name}</div>
+                            <div class="col-md-3">₪${v.price_without_vat} ללא מע"מ</div>
+                            <div class="col-md-3">₪${v.price_with_vat} כולל מע"מ</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        });
+}
+
+document.getElementById('addVariationForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const submitButton = this.querySelector('button[type="submit"]');
+    submitButton.disabled = true;  // מניעת לחיצה כפולה
+    
+    fetch(`/add-variation/${currentProductId}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message);
+            this.reset();
+            loadVariations();
+        } else {
+            showToast(data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('אירעה שגיאה בהוספת הווריאציה', 'danger');
+    })
+    .finally(() => {
+        submitButton.disabled = false;  // אפשור הכפתור מחדש
+    });
+});
+
+function addToCartWithVariation(productId) {
+    const variationSelect = document.getElementById(`variation_${productId}`);
+    const quantity = parseInt(document.getElementById(`quantity_${productId}`).value) || 1;
+    
+    if (!variationSelect.value) {
+        showToast('נא לבחור וריאציה', 'warning');
+        return;
+    }
+    
+    if (quantity < 1) {
+        showToast('כמות חייבת להיות לפחות 1', 'warning');
+        return;
+    }
+
+    const selectedOption = variationSelect.options[variationSelect.selectedIndex];
+    const variationId = variationSelect.value;
+    const priceWithVat = parseFloat(selectedOption.dataset.price);
+    const priceWithoutVat = parseFloat(selectedOption.dataset.priceWithoutVat);
+
+    fetch(`/add-to-cart/${productId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            quantity: quantity,
+            variation_id: variationId,
+            price_with_vat: priceWithVat,
+            price_without_vat: priceWithoutVat
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+        } else {
+            showToast(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('שגיאה בהוספה לסל', 'error');
+    });
+}
+
+function deleteAllProducts() {
+    if (confirm('האם אתה בטוח שברצונך למחוק את כל המוצרים? פעולה זו אינה הפיכה!')) {
+        fetch('/delete-all-products', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('שגיאה במחיקת המוצרים');
+        });
+    }
+}
+</script>
+{% endblock %} 

@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}סל הזמנות{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">סל הזמנות</h2>
+
+{% if cart_items %}
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title mb-3">פרטי לקוח</h5>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label">בחר לקוח קיים</label>
+                    <select class="form-select" id="customerSelect" onchange="selectCustomer(this.value)">
+                        <option value="">בחר לקוח...</option>
+                        {% for customer in customers %}
+                        <option value="{{ customer.id }}">{{ customer.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <button class="btn btn-outline-primary" onclick="showNewCustomerModal()">
+                        <i class="bi bi-plus-lg"></i> הוסף לקוח חדש
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div id="customerDetails" class="border rounded p-3" style="display: none;">
+                    <h6 class="mb-3">פרטי הלקוח</h6>
+                    <p class="mb-2"><strong>שם:</strong> <span id="customerName"></span></p>
+                    <p class="mb-2"><strong>כתובת:</strong> <span id="customerAddress"></span></p>
+                    <p class="mb-2"><strong>טלפון:</strong> <span id="customerPhone"></span></p>
+                    <p class="mb-2"><strong>אימייל:</strong> <span id="customerEmail"></span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- מודל להוספת לקוח חדש -->
+<div class="modal fade" id="newCustomerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">הוספת לקוח חדש</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">שם לקוח / בית עסק</label>
+                    <input type="text" class="form-control" id="newCustomerName">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">כתובת</label>
+                    <input type="text" class="form-control" id="newCustomerAddress">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">טלפון</label>
+                    <input type="tel" class="form-control" id="newCustomerPhone">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">אימייל</label>
+                    <input type="email" class="form-control" id="newCustomerEmail">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                <button type="button" class="btn btn-primary" onclick="addNewCustomer()">הוסף לקוח</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>שם המוצר</th>
+                        <th>מחיר ללא מע"מ</th>
+                        <th>מחיר כולל מע"מ</th>
+                        <th>כמות</th>
+                        <th>סה"כ ללא מע"מ</th>
+                        <th>סה"כ כולל מע"מ</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in cart_items %}
+                    <tr>
+                        <td>
+                            {{ item.product.name }}
+                            {% if item.variation %}
+                            <br>
+                            <small class="text-muted">וריאציה: {{ item.variation.name }}</small>
+                            {% endif %}
+                        </td>
+                        <td>₪{{ "%.2f"|format(item.price_without_vat) }}</td>
+                        <td>₪{{ "%.2f"|format(item.price_with_vat) }}</td>
+                        <td>
+                            <input type="number" min="1" value="{{ item.quantity }}" 
+                                   onchange="updateQuantity({{ item.product.id }}, this.value)"
+                                   class="form-control" style="width: 80px">
+                        </td>
+                        <td>₪{{ "%.2f"|format(item.total_without_vat) }}</td>
+                        <td>₪{{ "%.2f"|format(item.total_with_vat) }}</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm" onclick="removeFromCart({{ item.product.id }})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="table-primary">
+                        <td colspan="4"><strong>סה"כ</strong></td>
+                        <td><strong>₪{{ "%.2f"|format(total_without_vat) }}</strong></td>
+                        <td><strong>₪{{ "%.2f"|format(total_with_vat) }}</strong></td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <div>
+                <button class="btn btn-secondary" onclick="clearCart()">
+                    <i class="bi bi-trash"></i> נקה עגלה
+                </button>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="exportPDF('warehouse')">
+                    <i class="bi bi-file-pdf"></i> ייצא PDF למחסן
+                </button>
+                <button class="btn btn-success" onclick="exportPDF('customer')">
+                    <i class="bi bi-file-pdf"></i> ייצא PDF ללקוח
+                </button>
+                <button class="btn btn-warning" onclick="finishOrder()">
+                    <i class="bi bi-check2-circle"></i> סיים הזמנה והתחל חדשה
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-cart"></i> סל ההזמנות ריק
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+let selectedCustomerId = null;
+const newCustomerModal = new bootstrap.Modal(document.getElementById('newCustomerModal'));
+
+function selectCustomer(customerId) {
+    if (!customerId) {
+        document.getElementById('customerDetails').style.display = 'none';
+        selectedCustomerId = null;
+        return;
+    }
+    
+    fetch(`/get-customer/${customerId}`)
+        .then(response => response.json())
+        .then(customer => {
+            selectedCustomerId = customer.id;
+            document.getElementById('customerName').textContent = customer.name;
+            document.getElementById('customerAddress').textContent = customer.address || '-';
+            document.getElementById('customerPhone').textContent = customer.phone || '-';
+            document.getElementById('customerEmail').textContent = customer.email || '-';
+            document.getElementById('customerDetails').style.display = 'block';
+        });
+}
+
+function showNewCustomerModal() {
+    newCustomerModal.show();
+}
+
+function addNewCustomer() {
+    const customerData = {
+        name: document.getElementById('newCustomerName').value.trim(),
+        address: document.getElementById('newCustomerAddress').value.trim(),
+        phone: document.getElementById('newCustomerPhone').value.trim(),
+        email: document.getElementById('newCustomerEmail').value.trim()
+    };
+    
+    if (!customerData.name) {
+        showToast('נא להזין שם לקוח', 'warning');
+        return;
+    }
+    
+    fetch('/add-customer', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(customerData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('הלקוח נוסף בהצלחה');
+            newCustomerModal.hide();
+            
+            // הוספת הלקוח החדש לרשימה
+            const select = document.getElementById('customerSelect');
+            const option = new Option(data.customer.name, data.customer.id);
+            select.add(option);
+            select.value = data.customer.id;
+            selectCustomer(data.customer.id);
+        } else {
+            showToast(data.message, 'danger');
+        }
+    });
+}
+
+function updateQuantity(productId, quantity) {
+    fetch('/update-cart/' + productId, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({quantity: quantity})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('הכמות עודכנה בהצלחה');
+            location.reload();
+        } else {
+            showToast('אירעה שגיאה בעדכון הכמות', 'danger');
+        }
+    });
+}
+
+function removeFromCart(productId) {
+    if (confirm('האם אתה בטוח שברצונך להסיר מוצר זה?')) {
+        fetch('/remove-from-cart/' + productId, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('המוצר הוסר בהצלחה');
+                location.reload();
+            } else {
+                showToast('אירעה שגיאה בהסרת המוצר', 'danger');
+            }
+        });
+    }
+}
+
+function clearCart() {
+    if (confirm('האם אתה בטוח שברצונך לנקות את סל ההזמנות?')) {
+        fetch('/clear-cart', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('סל ההזמנות נוקה בהצלחה');
+                location.reload();
+            } else {
+                showToast('אירעה שגיאה בניקוי הסל', 'danger');
+            }
+        });
+    }
+}
+
+function exportPDF(type) {
+    if (!selectedCustomerId) {
+        showToast('נא לבחור לקוח', 'warning');
+        return;
+    }
+    window.location.href = `{{ url_for('export_pdf') }}?type=${type}&customer_id=${selectedCustomerId}`;
+}
+
+function finishOrder() {
+    if (!selectedCustomerId) {
+        showToast('נא לבחור לקוח', 'warning');
+        return;
+    }
+    
+    if (confirm('האם אתה בטוח שברצונך לסיים את ההזמנה הנוכחית ולהתחיל הזמנה חדשה?')) {
+        fetch('/finish-order', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                customer_id: selectedCustomerId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('ההזמנה הושלמה בהצלחה');
+                location.reload();
+            } else {
+                showToast(data.message, 'danger');
+            }
+        });
+    }
+}
+</script>
+{% endblock %} 

@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}ניהול קטגוריות{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>ניהול קטגוריות</h2>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+        <i class="bi bi-plus-lg"></i> הוסף קטגוריה חדשה
+    </button>
+</div>
+
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for category in categories %}
+    <div class="col">
+        <div class="card h-100">
+            <div class="category-image-container">
+                {% if category.image %}
+                <img src="{{ url_for('static', filename='uploads/' + category.image) }}" 
+                     class="card-img-top category-image" 
+                     alt="{{ category.name }}">
+                {% else %}
+                <div class="no-image-placeholder">
+                    <i class="bi bi-image text-muted"></i>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <h5 class="card-title">{{ category.name }}</h5>
+                <p class="card-text">מספר מוצרים: {{ category.products|length }}</p>
+                <div class="btn-group">
+                    <a href="{{ url_for('category_products', category_id=category.id) }}" class="btn btn-primary">
+                        <i class="bi bi-eye"></i> צפה במוצרים
+                    </a>
+                    <button class="btn btn-warning" onclick="editCategory({{ category.id }})">
+                        <i class="bi bi-pencil"></i> ערוך
+                    </button>
+                    <button class="btn btn-danger" onclick="deleteCategory({{ category.id }})">
+                        <i class="bi bi-trash"></i> מחק
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal להוספת קטגוריה -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">הוספת קטגוריה חדשה</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_category') }}" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">שם הקטגוריה</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">תמונה</label>
+                        <input type="file" class="form-control" name="image" accept="image/png, image/jpeg, image/gif, image/webp">
+                        <small class="text-muted">ניתן להעלות תמונות מסוג: PNG, JPG, JPEG, GIF, WEBP</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                    <button type="submit" class="btn btn-primary">שמור קטגוריה</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- נוסיף מודל לעריכת קטגוריה -->
+<div class="modal fade" id="editCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">עריכת קטגוריה</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editCategoryForm" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">שם הקטגוריה</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">תמונה חדשה (אופציונלי)</label>
+                        <input type="file" class="form-control" name="image" accept="image/png, image/jpeg, image/gif, image/webp">
+                        <small class="text-muted">ניתן להעלות תמונות מסוג: PNG, JPG, JPEG, GIF, WEBP</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                    <button type="submit" class="btn btn-primary">שמור שינויים</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+.category-image-container {
+    height: 200px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f8f9fa;
+}
+
+.category-image {
+    object-fit: cover;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.3s ease;
+}
+
+.no-image-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 3rem;
+    color: #dee2e6;
+}
+
+.card:hover .category-image {
+    transform: scale(1.1);
+}
+
+.card {
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentCategoryId = null;
+const editModal = new bootstrap.Modal(document.getElementById('editCategoryModal'));
+
+function editCategory(categoryId) {
+    currentCategoryId = categoryId;
+    fetch(`/get-category/${categoryId}`)
+        .then(response => response.json())
+        .then(data => {
+            const form = document.getElementById('editCategoryForm');
+            form.name.value = data.name;
+            editModal.show();
+        });
+}
+
+document.getElementById('editCategoryForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    
+    fetch(`/edit-category/${currentCategoryId}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message);
+            location.reload();
+        } else {
+            showToast(data.message, 'danger');
+        }
+    });
+});
+
+function deleteCategory(categoryId) {
+    if (confirm('האם אתה בטוח שברצונך למחוק קטגוריה זו?')) {
+        fetch(`/delete-category/${categoryId}`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message);
+                location.reload();
+            } else {
+                showToast(data.message, 'danger');
+            }
+        });
+    }
+}
+</script>
+{% endblock %} 

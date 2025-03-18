@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.name }} - מוצרים{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>מוצרים בקטגוריה: {{ category.name }}</h2>
+    <a href="{{ url_for('categories') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-right"></i> חזרה לקטגוריות
+    </a>
+</div>
+
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for product in category.products %}
+    <div class="col">
+        <div class="card h-100">
+            {% if product.image %}
+            <img src="{{ url_for('static', filename='uploads/' + product.image) }}" class="card-img-top" alt="{{ product.name }}">
+            {% endif %}
+            <div class="card-body">
+                <h5 class="card-title">{{ product.name }}</h5>
+                <p class="card-text">
+                    מחיר ללא מע"מ: ₪{{ "%.2f"|format(product.price_without_vat) }}<br>
+                    מחיר כולל מע"מ: ₪{{ "%.2f"|format(product.price_with_vat) }}
+                </p>
+                <button class="btn btn-success" onclick="addToCart({{ product.id }})">
+                    <i class="bi bi-cart-plus"></i> הוסף להזמנה
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addToCart(productId) {
+    fetch('/add-to-cart/' + productId, {method: 'POST'})
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('המוצר נוסף להזמנה בהצלחה');
+            }
+        });
+}
+</script>
+{% endblock %} 
