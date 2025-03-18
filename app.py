@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -9,6 +9,8 @@ import arabic_reshaper
 from bidi.algorithm import get_display
 import os.path
 from flask_migrate import Migrate
+import pandas as pd
+import zipfile
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -176,8 +178,8 @@ def add_product():
         return redirect(url_for('login'))
     
     name = request.form['name']
-    price_without_vat = float(request.form['price_without_vat'])
-    price_with_vat = price_without_vat * 1.18  # מע"מ 18%
+    price_with_vat = float(request.form['price_with_vat'])
+    price_without_vat = price_with_vat / 1.18  # חישוב מחיר ללא מע"מ
     category_id = int(request.form['category_id'])
     
     image_filename = None
@@ -661,8 +663,9 @@ def edit_product(product_id):
     
     try:
         product.name = request.form['name']
-        product.price_without_vat = float(request.form['price_without_vat'])
-        product.price_with_vat = product.price_without_vat * 1.18
+        price_with_vat = float(request.form['price_with_vat'])
+        product.price_without_vat = price_with_vat / 1.18  # חישוב מחיר ללא מע"מ
+        product.price_with_vat = price_with_vat
         product.category_id = int(request.form['category_id'])
         
         if 'image' in request.files:
@@ -693,21 +696,53 @@ def delete_product(product_id):
         return jsonify({'success': False, 'message': 'נדרשת התחברות'})
     
     product = Product.query.get_or_404(product_id)
+    print(f"DEBUG: Trying to delete product {product_id}")
     
     try:
+        # בדיקה אם המוצר קיים בהזמנות
+        order_items = OrderItem.query.filter_by(product_id=product_id).all()  # שינוי ל-all() במקום first()
+        print(f"DEBUG: Found {len(order_items)} order items for product {product_id}")
+        
+        if order_items:
+            print(f"DEBUG: Order items details: {[{'order_id': item.order_id, 'quantity': item.quantity} for item in order_items]}")
+            return jsonify({
+                'success': False, 
+                'message': 'לא ניתן למחוק מוצר שקיים בהזמנות. יש למחוק קודם את ההזמנות הרלוונטיות'
+            })
+        
+        # בדיקה אם המוצר נמצא בסל הקניות הנוכחי
+        if 'cart' in session:
+            cart_items = [item for item in session['cart'] if item['product_id'] == product_id]
+            print(f"DEBUG: Found {len(cart_items)} cart items for product {product_id}")
+            if cart_items:
+                return jsonify({
+                    'success': False,
+                    'message': 'לא ניתן למחוק מוצר שנמצא בסל הקניות. יש לנקות את הסל קודם'
+                })
+        
+        # מחיקת כל הווריאציות של המוצר
+        variations = ProductVariation.query.filter_by(product_id=product_id).all()
+        print(f"DEBUG: Found {len(variations)} variations for product {product_id}")
+        ProductVariation.query.filter_by(product_id=product_id).delete()
+        
         # מחיקת תמונת המוצר אם קיימת
         if product.image:
             image_path = os.path.join(app.config['UPLOAD_FOLDER'], product.image)
+            print(f"DEBUG: Checking for image at {image_path}")
             if os.path.exists(image_path):
                 os.remove(image_path)
+                print("DEBUG: Image deleted")
         
+        # מחיקת המוצר עצמו
         db.session.delete(product)
         db.session.commit()
+        print("DEBUG: Product deleted successfully")
         return jsonify({'success': True, 'message': 'המוצר נמחק בהצלחה'})
     
     except Exception as e:
+        print(f"DEBUG: Error = {str(e)}")
         db.session.rollback()
-        return jsonify({'success': False, 'message': 'אירעה שגיאה במחיקת המוצר'})
+        return jsonify({'success': False, 'message': f'אירעה שגיאה במחיקת המוצר: {str(e)}'})
 
 @app.route('/edit-category/<int:category_id>', methods=['POST'])
 def edit_category(category_id):
@@ -974,6 +1009,340 @@ def delete_all_products():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': f'שגיאה במחיקת המוצרים: {str(e)}'})
+
+@app.route('/delete-order/<int:order_id>', methods=['POST'])
+def delete_order(order_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'נדרשת התחברות'})
+    
+    try:
+        # מחיקת כל פריטי ההזמנה
+        OrderItem.query.filter_by(order_id=order_id).delete()
+        
+        # מחיקת ההזמנה עצמה
+        order = Order.query.get_or_404(order_id)
+        db.session.delete(order)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'ההזמנה נמחקה בהצלחה'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'אירעה שגיאה במחיקת ההזמנה: {str(e)}'})
+
+@app.route('/import-products', methods=['POST'])
+def import_products():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'נדרשת התחברות'})
+    
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': 'לא נבחר קובץ'})
+    
+    file = request.files['file']
+    category_id = request.form.get('category_id')
+    
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'לא נבחר קובץ'})
+    
+    if not file.filename.endswith('.csv'):
+        return jsonify({'success': False, 'message': 'נא להעלות קובץ CSV בלבד'})
+    
+    try:
+        # קריאת הקובץ CSV
+        df = pd.read_csv(file, encoding='utf-8-sig')
+        required_columns = ['name', 'price_with_vat']
+        
+        # בדיקת עמודות נדרשות
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            return jsonify({
+                'success': False, 
+                'message': f'חסרות העמודות הבאות: {", ".join(missing_columns)}'
+            })
+        
+        # ייבוא כל מוצר
+        for _, row in df.iterrows():
+            price_with_vat = float(row['price_with_vat'])
+            price_without_vat = price_with_vat / 1.18  # חישוב מחיר ללא מע"מ
+            
+            # שימוש ב-category_id מהקובץ אם קיים, אחרת מהטופס
+            product_category_id = row.get('category_id', category_id)
+            
+            # בדיקה שהקטגוריה קיימת
+            if product_category_id and not Category.query.get(product_category_id):
+                return jsonify({
+                    'success': False,
+                    'message': f'קטגוריה עם מזהה {product_category_id} לא קיימת'
+                })
+            
+            product = Product(
+                name=row['name'],
+                price_without_vat=price_without_vat,
+                price_with_vat=price_with_vat,
+                image=row.get('image', None),  # שימוש ב-get עם ברירת מחדל
+                category_id=product_category_id
+            )
+            db.session.add(product)
+            
+            # אם יש וריאציות, נוסיף אותן
+            variations_columns = [col for col in df.columns if col.startswith('variation_')]
+            if variations_columns:
+                variation_names = [col for col in variations_columns if col.endswith('_name')]
+                for var_name_col in variation_names:
+                    base_name = var_name_col[:-5]  # הסרת '_name'
+                    price_with_vat_col = f'{base_name}_price_with_vat'
+                    
+                    if pd.notna(row[var_name_col]):
+                        variation_price_with_vat = float(row[price_with_vat_col])
+                        variation_price_without_vat = variation_price_with_vat / 1.18  # חישוב מחיר ללא מע"מ
+                        
+                        variation = ProductVariation(
+                            name=row[var_name_col],
+                            price_without_vat=variation_price_without_vat,
+                            price_with_vat=variation_price_with_vat,
+                            image=row.get(f'{base_name}_image', None)  # תמונה לווריאציה אם קיימת
+                        )
+                        product.variations.append(variation)
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'המוצרים יובאו בהצלחה'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'אירעה שגיאה בייבוא: {str(e)}'})
+
+@app.route('/export-all', methods=['GET'])
+def export_all():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'נדרשת התחברות'})
+    
+    try:
+        # יצירת DataFrame של קטגוריות
+        categories = Category.query.all()
+        print(f"Found {len(categories)} categories")  # לוג לבדיקה
+        categories_data = []
+        for category in categories:
+            categories_data.append({
+                'id': category.id,
+                'name': category.name,
+                'image': category.image
+            })
+        categories_df = pd.DataFrame(categories_data)
+        print(f"Categories DataFrame shape: {categories_df.shape}")  # לוג לבדיקה
+        
+        # יצירת DataFrame של מוצרים
+        products = Product.query.all()
+        print(f"Found {len(products)} products")  # לוג לבדיקה
+        products_data = []
+        for product in products:
+            products_data.append({
+                'id': product.id,
+                'name': product.name,
+                'price_with_vat': product.price_with_vat,
+                'price_without_vat': product.price_without_vat,
+                'image': product.image,
+                'category_id': product.category_id
+            })
+        products_df = pd.DataFrame(products_data)
+        print(f"Products DataFrame shape: {products_df.shape}")  # לוג לבדיקה
+        
+        # יצירת DataFrame של וריאציות
+        variations = ProductVariation.query.all()
+        print(f"Found {len(variations)} variations")  # לוג לבדיקה
+        variations_data = []
+        for variation in variations:
+            variations_data.append({
+                'id': variation.id,
+                'product_id': variation.product_id,
+                'name': variation.name,
+                'price_with_vat': variation.price_with_vat,
+                'price_without_vat': variation.price_without_vat,
+                'image': variation.image
+            })
+        variations_df = pd.DataFrame(variations_data)
+        print(f"Variations DataFrame shape: {variations_df.shape}")  # לוג לבדיקה
+        
+        # יצירת נתיב מלא לתיקיית הייצוא
+        export_dir = os.path.join(app.root_path, 'static', 'exports')
+        if not os.path.exists(export_dir):
+            os.makedirs(export_dir)
+            print(f"Created export directory: {export_dir}")  # לוג לבדיקה
+        
+        # שמירת הקבצים
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # שמירת קטגוריות
+        categories_path = os.path.join(export_dir, f'categories_{timestamp}.csv')
+        categories_df.to_csv(categories_path, index=False, encoding='utf-8-sig')
+        print(f"Saved categories to {categories_path}")  # לוג לבדיקה
+        
+        # שמירת מוצרים
+        products_path = os.path.join(export_dir, f'products_{timestamp}.csv')
+        products_df.to_csv(products_path, index=False, encoding='utf-8-sig')
+        print(f"Saved products to {products_path}")  # לוג לבדיקה
+        
+        # שמירת וריאציות
+        variations_path = os.path.join(export_dir, f'variations_{timestamp}.csv')
+        variations_df.to_csv(variations_path, index=False, encoding='utf-8-sig')
+        print(f"Saved variations to {variations_path}")  # לוג לבדיקה
+        
+        # יצירת קובץ ZIP
+        zip_path = os.path.join(export_dir, f'export_{timestamp}.zip')
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(categories_path, f'categories_{timestamp}.csv')
+            zipf.write(products_path, f'products_{timestamp}.csv')
+            zipf.write(variations_path, f'variations_{timestamp}.csv')
+        
+        # מחיקת קבצי ה-CSV הבודדים
+        os.remove(categories_path)
+        os.remove(products_path)
+        os.remove(variations_path)
+        
+        # החזרת קובץ ה-ZIP למשתמש
+        return send_from_directory(
+            export_dir,
+            f'export_{timestamp}.zip',
+            as_attachment=True,
+            download_name=f'export_{timestamp}.zip'
+        )
+        
+    except Exception as e:
+        print(f"Error in export_all: {str(e)}")  # לוג שגיאה
+        return jsonify({'success': False, 'message': f'אירעה שגיאה בייצוא: {str(e)}'})
+
+@app.route('/import-all', methods=['POST'])
+def import_all():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'נדרשת התחברות'})
+    
+    try:
+        # בדיקה אם יש קבצים שהועלו
+        if 'categories' not in request.files and 'products' not in request.files and 'variations' not in request.files:
+            return jsonify({'success': False, 'message': 'לא נבחרו קבצים לייבוא'})
+        
+        # ייבוא קטגוריות אם קיים
+        if 'categories' in request.files and request.files['categories'].filename:
+            categories_file = request.files['categories']
+            if categories_file.filename.endswith('.csv'):
+                categories_df = pd.read_csv(categories_file)
+                print(f"Found {len(categories_df)} categories to import")
+                
+                # מחיקת קטגוריות קיימות
+                Category.query.delete()
+                
+                # ייבוא קטגוריות חדשות
+                for _, row in categories_df.iterrows():
+                    category = Category(
+                        name=row['name'],
+                        image=row.get('image', None)  # שימוש ב-get עם ברירת מחדל
+                    )
+                    db.session.add(category)
+                db.session.commit()
+                print("Categories imported successfully")
+        
+        # ייבוא מוצרים אם קיים
+        if 'products' in request.files and request.files['products'].filename:
+            products_file = request.files['products']
+            if products_file.filename.endswith('.csv'):
+                products_df = pd.read_csv(products_file)
+                print(f"Found {len(products_df)} products to import")
+                
+                # מחיקת מוצרים קיימים
+                Product.query.delete()
+                
+                # ייבוא מוצרים חדשים
+                for _, row in products_df.iterrows():
+                    # חישוב מחיר ללא מע"מ
+                    price_with_vat = float(row['price_with_vat'])
+                    price_without_vat = price_with_vat / 1.18
+                    
+                    product = Product(
+                        name=row['name'],
+                        price_with_vat=price_with_vat,
+                        price_without_vat=price_without_vat,
+                        image=row.get('image', None),  # שימוש ב-get עם ברירת מחדל
+                        category_id=row.get('category_id', None)  # שימוש ב-get עם ברירת מחדל
+                    )
+                    db.session.add(product)
+                db.session.commit()
+                print("Products imported successfully")
+        
+        # ייבוא וריאציות אם קיים
+        if 'variations' in request.files and request.files['variations'].filename:
+            variations_file = request.files['variations']
+            if variations_file.filename.endswith('.csv'):
+                variations_df = pd.read_csv(variations_file)
+                print(f"Found {len(variations_df)} variations to import")
+                
+                # מחיקת וריאציות קיימות
+                ProductVariation.query.delete()
+                
+                # ייבוא וריאציות חדשות
+                for _, row in variations_df.iterrows():
+                    # חישוב מחיר ללא מע"מ
+                    price_with_vat = float(row['price_with_vat'])
+                    price_without_vat = price_with_vat / 1.18
+                    
+                    variation = ProductVariation(
+                        product_id=row['product_id'],
+                        name=row['name'],
+                        price_with_vat=price_with_vat,
+                        price_without_vat=price_without_vat,
+                        image=row.get('image', None)  # שימוש ב-get עם ברירת מחדל
+                    )
+                    db.session.add(variation)
+                db.session.commit()
+                print("Variations imported successfully")
+        
+        return jsonify({'success': True, 'message': 'הנתונים יובאו בהצלחה'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in import_all: {str(e)}")
+        return jsonify({'success': False, 'message': f'אירעה שגיאה בייבוא: {str(e)}'})
+
+@app.route('/import-categories', methods=['POST'])
+def import_categories():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'נדרשת התחברות'})
+    
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': 'לא נבחר קובץ'})
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'לא נבחר קובץ'})
+    
+    if not file.filename.endswith('.csv'):
+        return jsonify({'success': False, 'message': 'נא להעלות קובץ CSV בלבד'})
+    
+    try:
+        # קריאת הקובץ CSV
+        df = pd.read_csv(file, encoding='utf-8-sig')
+        required_columns = ['name']
+        
+        # בדיקת עמודות נדרשות
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            return jsonify({
+                'success': False, 
+                'message': f'חסרות העמודות הבאות: {", ".join(missing_columns)}'
+            })
+        
+        # ייבוא כל קטגוריה
+        for _, row in df.iterrows():
+            category = Category(
+                name=row['name'],
+                image=row.get('image', None)  # שימוש ב-get עם ברירת מחדל
+            )
+            db.session.add(category)
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'הקטגוריות יובאו בהצלחה'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'אירעה שגיאה בייבוא: {str(e)}'})
 
 if __name__ == '__main__':
     app.run(debug=True) 

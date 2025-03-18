@@ -37,7 +37,6 @@ ENV/
 
 # Uploads
 static/uploads/
-static/images/
 
 # Logs
 *.log

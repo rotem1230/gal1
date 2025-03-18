@@ -15,6 +15,92 @@
     </div>
 </div>
 
+<!-- הוספת כפתורי ייצוא וייבוא מעל הטבלה -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <button class="btn btn-success" onclick="showImportModal()">
+            <i class="bi bi-file-earmark-arrow-up"></i> ייבא מוצרים מ-CSV
+        </button>
+        <a href="/static/templates/products_template.csv" class="btn btn-outline-secondary">
+            <i class="bi bi-download"></i> הורד תבנית CSV
+        </a>
+        <button class="btn btn-primary" onclick="exportAll()">
+            <i class="bi bi-box-arrow-up"></i> ייצא הכל
+        </button>
+        <button class="btn btn-warning" onclick="showImportAllModal()">
+            <i class="bi bi-box-arrow-down"></i> ייבא הכל
+        </button>
+    </div>
+</div>
+
+<!-- מודל לייבוא מוצרים -->
+<div class="modal fade" id="importModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">ייבוא מוצרים מקובץ CSV</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="importForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">בחר קובץ CSV:</label>
+                        <input type="file" class="form-control" name="file" accept=".csv" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">בחר קטגוריה:</label>
+                        <select class="form-select" name="category_id" required>
+                            <option value="">בחר קטגוריה...</option>
+                            {% for category in categories %}
+                            <option value="{{ category.id }}">{{ category.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                <button type="button" class="btn btn-primary" onclick="importProducts()">ייבא</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- מודל לייבוא כל הנתונים -->
+<div class="modal fade" id="importAllModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">ייבוא כל הנתונים</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="importAllForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">קובץ קטגוריות (CSV)</label>
+                        <input type="file" class="form-control" name="categories" accept=".csv">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">קובץ מוצרים (CSV)</label>
+                        <input type="file" class="form-control" name="products" accept=".csv">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">קובץ וריאציות (CSV)</label>
+                        <input type="file" class="form-control" name="variations" accept=".csv">
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> שים לב: ייבוא כל הנתונים ימחק את כל הנתונים הקיימים במערכת!
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                <button type="button" class="btn btn-primary" onclick="importAll()">ייבא הכל</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- טופס חיפוש וסינון -->
 <div class="card mb-4">
     <div class="card-body">
@@ -155,13 +241,13 @@
                         <input type="text" class="form-control" name="name" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">מחיר ללא מע"מ</label>
-                        <input type="number" step="0.01" class="form-control" name="price_without_vat" id="price_without_vat" required 
-                               oninput="calculateVAT(this, 'add')">
+                        <label class="form-label">מחיר כולל מע"מ</label>
+                        <input type="number" step="0.01" class="form-control" name="price_with_vat" id="price_with_vat" required 
+                               oninput="calculatePriceWithoutVAT(this, 'add')">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">מחיר כולל מע"מ</label>
-                        <input type="number" step="0.01" class="form-control" name="price_with_vat" id="price_with_vat" required readonly>
+                        <label class="form-label">מחיר ללא מע"מ</label>
+                        <input type="number" step="0.01" class="form-control" name="price_without_vat" id="price_without_vat" readonly>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">קטגוריה</label>
@@ -201,13 +287,13 @@
                         <input type="text" class="form-control" name="name" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">מחיר ללא מע"מ</label>
-                        <input type="number" step="0.01" class="form-control" name="price_without_vat" id="edit_price_without_vat" required 
-                               oninput="calculateVAT(this, 'edit')">
+                        <label class="form-label">מחיר כולל מע"מ</label>
+                        <input type="number" step="0.01" class="form-control" name="price_with_vat" id="edit_price_with_vat" required 
+                               oninput="calculatePriceWithoutVAT(this, 'edit')">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">מחיר כולל מע"מ</label>
-                        <input type="number" step="0.01" class="form-control" name="price_with_vat" id="edit_price_with_vat" required readonly>
+                        <label class="form-label">מחיר ללא מע"מ</label>
+                        <input type="number" step="0.01" class="form-control" name="price_without_vat" id="edit_price_without_vat" readonly>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">קטגוריה</label>
@@ -269,6 +355,83 @@
                 <div id="variationsList">
                     <!-- כאן יוצגו הווריאציות הקיימות -->
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <button class="btn btn-primary me-2" onclick="showAddProductModal()">
+            <i class="fas fa-plus"></i> הוסף מוצר
+        </button>
+        <button class="btn btn-success me-2" onclick="showImportProductsModal()">
+            <i class="fas fa-file-import"></i> ייבוא מוצרים
+        </button>
+        <button class="btn btn-info me-2" onclick="showImportCategoriesModal()">
+            <i class="fas fa-file-import"></i> ייבוא קטגוריות
+        </button>
+        <button class="btn btn-warning me-2" onclick="exportAll()">
+            <i class="fas fa-file-export"></i> ייצוא הכל
+        </button>
+        <button class="btn btn-danger" onclick="deleteAllProducts()">
+            <i class="fas fa-trash"></i> מחק הכל
+        </button>
+    </div>
+</div>
+
+<!-- מודל ייבוא מוצרים -->
+<div class="modal fade" id="importProductsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">ייבוא מוצרים מ-CSV</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="importProductsForm">
+                    <div class="mb-3">
+                        <label for="productsFile" class="form-label">בחר קובץ CSV</label>
+                        <input type="file" class="form-control" id="productsFile" accept=".csv" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="categorySelect" class="form-label">קטגוריה (אופציונלי)</label>
+                        <select class="form-select" id="categorySelect">
+                            <option value="">בחר קטגוריה</option>
+                            {% for category in categories %}
+                            <option value="{{ category.id }}">{{ category.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                <button type="button" class="btn btn-primary" onclick="importProducts()">ייבא</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- מודל ייבוא קטגוריות -->
+<div class="modal fade" id="importCategoriesModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">ייבוא קטגוריות מ-CSV</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="importCategoriesForm">
+                    <div class="mb-3">
+                        <label for="categoriesFile" class="form-label">בחר קובץ CSV</label>
+                        <input type="file" class="form-control" id="categoriesFile" accept=".csv" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                <button type="button" class="btn btn-primary" onclick="importCategories()">ייבא</button>
             </div>
         </div>
     </div>
@@ -385,15 +548,15 @@
     const editModal = new bootstrap.Modal(document.getElementById('editProductModal'));
     const variationsModal = new bootstrap.Modal(document.getElementById('variationsModal'));
 
-    function calculateVAT(input, mode) {
-        const priceWithoutVAT = parseFloat(input.value) || 0;
+    function calculatePriceWithoutVAT(input, mode) {
+        const priceWithVAT = parseFloat(input.value) || 0;
         const VAT_RATE = 1.18;  // מע"מ 18%
-        const priceWithVAT = (priceWithoutVAT * VAT_RATE).toFixed(2);
+        const priceWithoutVAT = (priceWithVAT / VAT_RATE).toFixed(2);
         
         if (mode === 'add') {
-            document.getElementById('price_with_vat').value = priceWithVAT;
+            document.getElementById('price_without_vat').value = priceWithoutVAT;
         } else {
-            document.getElementById('edit_price_with_vat').value = priceWithVAT;
+            document.getElementById('edit_price_without_vat').value = priceWithoutVAT;
         }
     }
 
@@ -404,8 +567,8 @@
             .then(data => {
                 const form = document.getElementById('editProductForm');
                 form.name.value = data.name;
-                form.price_without_vat.value = data.price_without_vat;
-                calculateVAT(form.price_without_vat, 'edit');
+                form.price_with_vat.value = data.price_with_vat;
+                calculatePriceWithoutVAT(form.price_with_vat, 'edit');
                 form.category_id.value = data.category_id;
                 editModal.show();
             });
@@ -652,6 +815,162 @@ function deleteAllProducts() {
             alert('שגיאה במחיקת המוצרים');
         });
     }
+}
+
+function showImportModal() {
+    new bootstrap.Modal(document.getElementById('importModal')).show();
+}
+
+function importProducts() {
+    const form = document.getElementById('importForm');
+    const formData = new FormData(form);
+    
+    fetch('/import-products', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('אירעה שגיאה בייבוא המוצרים');
+    });
+}
+
+function showImportAllModal() {
+    new bootstrap.Modal(document.getElementById('importAllModal')).show();
+}
+
+function importAll() {
+    const form = document.getElementById('importAllForm');
+    const formData = new FormData(form);
+    
+    fetch('/import-all', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('אירעה שגיאה בייבוא הנתונים');
+    });
+}
+
+function exportAll() {
+    fetch('/export-all')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            // יצירת קישור להורדה
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `export_${new Date().toISOString().slice(0,19).replace(/[:]/g, '')}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('אירעה שגיאה בייצוא הנתונים');
+        });
+}
+
+function showAddProductModal() {
+    const modal = new bootstrap.Modal(document.getElementById('addProductModal'));
+    modal.show();
+}
+
+function showImportProductsModal() {
+    const modal = new bootstrap.Modal(document.getElementById('importProductsModal'));
+    modal.show();
+}
+
+function showImportCategoriesModal() {
+    const modal = new bootstrap.Modal(document.getElementById('importCategoriesModal'));
+    modal.show();
+}
+
+function importProducts() {
+    const fileInput = document.getElementById('productsFile');
+    const categorySelect = document.getElementById('categorySelect');
+    
+    if (!fileInput.files[0]) {
+        alert('נא לבחור קובץ');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    if (categorySelect.value) {
+        formData.append('category_id', categorySelect.value);
+    }
+    
+    fetch('/import-products', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('אירעה שגיאה בייבוא המוצרים');
+    });
+}
+
+function importCategories() {
+    const fileInput = document.getElementById('categoriesFile');
+    
+    if (!fileInput.files[0]) {
+        alert('נא לבחור קובץ');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    fetch('/import-categories', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('אירעה שגיאה בייבוא הקטגוריות');
+    });
 }
 </script>
 {% endblock %} 

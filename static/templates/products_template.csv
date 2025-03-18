@@ -1,0 +1,3 @@
+name,price_with_vat,image_url,variation_1_name,variation_1_price_with_vat,variation_2_name,variation_2_price_with_vat
+"חולצת כותנה",100,"https://example.com/shirt.jpg","S",100,"M",105
+"מכנסי ג'ינס",150,"https://example.com/jeans.jpg","32",150,"34",155

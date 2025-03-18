@@ -31,6 +31,9 @@
                             <button class="btn btn-primary btn-sm" onclick="window.location.href='{{ url_for('export_pdf', order_id=order.id, type='warehouse') }}'">
                                 <i class="bi bi-file-pdf"></i> הורד PDF
                             </button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteOrder({{ order.id }})">
+                                <i class="bi bi-trash"></i> מחק הזמנה
+                            </button>
                         </div>
                     </div>
                     <div class="card-body">
@@ -92,5 +95,32 @@
     background-color: #f8f9fa;
 }
 </style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function deleteOrder(orderId) {
+    if (confirm('האם אתה בטוח שברצונך למחוק את ההזמנה?')) {
+        fetch(`/delete-order/${orderId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('אירעה שגיאה במחיקת ההזמנה');
+        });
+    }
+}
+</script>
 {% endblock %}
 {% endblock %} 
