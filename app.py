@@ -103,6 +103,11 @@ else:
     with app.app_context():
         db.create_all()
 
+# וידוא שתיקיית ההעלאות קיימת
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+    print(f"נוצרה תיקיית העלאות: {app.config['UPLOAD_FOLDER']}")
+
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 def allowed_file(filename):
@@ -480,9 +485,16 @@ def export_pdf():
     
     # לוגו בצד ימין
     try:
+        # בדיקה בתיקיית static/images
         logo_path = os.path.join(app.root_path, 'static', 'images', 'logo.png')
+        if not os.path.exists(logo_path):
+            # בדיקה בתיקיית uploads
+            logo_path = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], 'logo.png')
+        
         if os.path.exists(logo_path):
             pdf.image(logo_path, x=10, y=10, w=50)
+        else:
+            print(f"קובץ הלוגו לא נמצא בנתיבים: {os.path.join(app.root_path, 'static', 'images', 'logo.png')} או {os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], 'logo.png')}")
     except Exception as e:
         print(f"שגיאה בטעינת הלוגו: {e}")
     
@@ -1343,6 +1355,35 @@ def import_categories():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': f'אירעה שגיאה בייבוא: {str(e)}'})
+
+@app.route('/upload-logo', methods=['POST'])
+def upload_logo():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'נדרשת התחברות'})
+    
+    if 'logo' not in request.files:
+        return jsonify({'success': False, 'message': 'לא נבחר קובץ'})
+    
+    file = request.files['logo']
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'לא נבחר קובץ'})
+    
+    if not allowed_file(file.filename):
+        return jsonify({'success': False, 'message': 'סוג הקובץ לא נתמך'})
+    
+    try:
+        # וידוא שתיקיית ההעלאות קיימת
+        if not os.path.exists(app.config['UPLOAD_FOLDER']):
+            os.makedirs(app.config['UPLOAD_FOLDER'])
+        
+        # שמירת הקובץ בשם קבוע
+        filename = 'logo.png'
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        
+        return jsonify({'success': True, 'message': 'הלוגו הועלה בהצלחה'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'אירעה שגיאה בהעלאת הלוגו: {str(e)}'})
 
 if __name__ == '__main__':
     app.run(debug=True) 

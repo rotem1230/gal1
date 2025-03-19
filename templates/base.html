@@ -42,8 +42,16 @@
                 מערכת ניהול מלאי
             </a>
             <div class="navbar-nav me-auto">
-                <a class="nav-link {% if request.endpoint == 'products' %}active{% endif %}" 
-                   href="{{ url_for('products') }}">מוצרים</a>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('products') }}">
+                        <i class="bi bi-box"></i> מוצרים
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#uploadLogoModal">
+                        <i class="bi bi-image"></i> העלאת לוגו
+                    </a>
+                </li>
                 <a class="nav-link {% if request.endpoint == 'categories' %}active{% endif %}" 
                    href="{{ url_for('categories') }}">קטגוריות</a>
                 <a class="nav-link {% if request.endpoint == 'cart' %}active{% endif %}" 
@@ -60,6 +68,31 @@
     </div>
 
     <div class="toast-container"></div>
+
+    <!-- מודל להעלאת לוגו -->
+    <div class="modal fade" id="uploadLogoModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">העלאת לוגו</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="uploadLogoForm" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label class="form-label">בחר קובץ לוגו</label>
+                            <input type="file" class="form-control" name="logo" accept="image/png, image/jpeg, image/gif, image/webp" required>
+                            <small class="text-muted">מומלץ להשתמש בתמונת PNG עם רקע שקוף</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                    <button type="button" class="btn btn-primary" onclick="uploadLogo()">העלה לוגו</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -86,6 +119,29 @@
             
             toast.addEventListener('hidden.bs.toast', () => {
                 toast.remove();
+            });
+        }
+
+        function uploadLogo() {
+            const form = document.getElementById('uploadLogoForm');
+            const formData = new FormData(form);
+            
+            fetch('/upload-logo', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('אירעה שגיאה בהעלאת הלוגו');
             });
         }
     </script>
